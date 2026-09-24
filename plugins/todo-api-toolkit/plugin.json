@@ -1,0 +1,6 @@
+{
+  "$schema": "https://developers.openai.com/codex/plugin.schema.json",
+  "name": "todo-api-toolkit",
+  "version": "0.1.0",
+  "description": "todo-api 團隊共用工具包：新增端點與發布流程的 Skills。單元 8：Plugin = Skills + 連接器的安裝包，用本機 marketplace 測試後再分發給團隊。"
+}

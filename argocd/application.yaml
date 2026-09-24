@@ -1,0 +1,25 @@
+# 單元 7：GitOps（開源 Argo CD 版）—— Git 裡的 k8s/ 是期望狀態，Argo CD 持續對齊叢集
+# 安裝 Argo CD 到 kind：
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# 套用本檔：kubectl apply -f argocd/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: todo-api
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/CHANGE_ME/todo-api.git
+    targetRevision: main
+    path: k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: todo
+  syncPolicy:
+    automated:
+      prune: true      # Git 刪掉的資源，叢集也刪
+      selfHeal: true   # 有人手動 kubectl 改壞，會自動改回 Git 的版本
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,38 @@
+# 單元 5：Rules —— 用執行政策管 Codex 在 sandbox 外能跑什麼（Starlark，experimental）
+# 專案層 rules 只有在「信任此專案」時才會載入。
+# decision: allow / prompt / forbidden
+
+# 破壞性指令一律禁止（CI 裡沒有人可以按 approve）
+prefix_rule(
+    pattern = ["rm", "-rf"],
+    decision = "forbidden",
+    justification = "CI 與 agent 都不該遞迴刪除",
+)
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "禁止覆寫遠端歷史",
+)
+prefix_rule(
+    pattern = ["kubectl", "delete"],
+    decision = "forbidden",
+    justification = "叢集資源只能經由 Git（GitOps）變更",
+)
+
+# 觸碰遠端、發佈類動作要先問人
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "推送前確認分支與內容",
+)
+prefix_rule(
+    pattern = ["gh", "pr", "create"],
+    decision = "prompt",
+    justification = "開 PR 前確認標題與內文",
+)
+
+# 常用的唯讀／測試指令直接放行
+prefix_rule(pattern = ["pytest"], decision = "allow")
+prefix_rule(pattern = ["ruff", "check"], decision = "allow")
+prefix_rule(pattern = ["git", "status"], decision = "allow")
+prefix_rule(pattern = ["git", "diff"], decision = "allow")

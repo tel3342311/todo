@@ -1,0 +1,19 @@
+# 單元 8：Auto-review —— 讓另一個 reviewer agent 代替你在 sandbox 邊界按 Approve
+# 複製成 .codex/config.toml（專案層，需「信任此專案」才會載入）
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+default_permissions = ":workspace"
+
+[auto_review]
+# 官方建議：先整份複製預設政策，再依自己的風險偏好收緊
+policy = """
+你是 Codex 的審批代理。只放行以下動作：
+- 在專案目錄內讀寫檔案
+- 執行 pytest、ruff、git status/diff
+其餘一律拒絕，特別是：任何網路請求、任何 git push、任何刪除指令。
+拒絕時說明原因。
+"""
+
+# 單元 6：Subagents 的全域上限（避免 PR 審查同時開太多平行 agent）
+[agents]
+max_concurrent_threads_per_session = 3

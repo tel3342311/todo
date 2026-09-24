@@ -1,0 +1,78 @@
+# 單元 6：CD 與 Pipeline as Code（GitHub 版）
+# main 有新 commit → 測試 → 建 image 推到 GHCR → 由 codex exec 改 k8s/deployment.yaml 的 tag 並開 PR
+# PR 由人 merge 後，Argo CD（單元 7）依 Git 同步到叢集。agent 只動 Git，不碰叢集。
+name: Build and release
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["k8s/**", "docs/**", "*.md"]
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+# 注意：GHCR 的 image 名稱必須全小寫，GitHub 帳號有大寫時 github.repository 不能直接用，見 build job 的 meta step。
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . && pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: meta
+        run: |
+          echo "tag=0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"   # 轉小寫
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:latest
+
+  bump-manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install -g @openai/codex
+      - name: Codex updates the manifest and opens a PR
+        env:
+          CODEX_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # codex exec 讀的是 CODEX_API_KEY（官方 Environment variables）
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          git config user.name "codex-bot"
+          git config user.email "codex-bot@users.noreply.github.com"
+          git checkout -B "deploy/${TAG}"
+          codex exec --sandbox workspace-write --ask-for-approval never \
+            "① 把 k8s/deployment.yaml 裡 todo-api 容器的 image tag 改成 ${TAG}，APP_VERSION env 也改成 ${TAG}。
+             ② 只允許修改 k8s/deployment.yaml。③ 不要動其他檔案。
+             ④ 改完用 grep 印出那兩行讓我確認。"
+          git add k8s/deployment.yaml
+          git commit -m "deploy: todo-api ${TAG}"
+          git push -u origin "deploy/${TAG}"
+          gh pr create --title "Deploy todo-api ${TAG}" \
+            --body "由 build-and-release workflow 透過 codex exec 產生。merge 後 Argo CD 會同步到叢集。"

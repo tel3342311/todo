@@ -1,0 +1,34 @@
+# 單元 5（下）：codex exec 當結構化 quality gate —— 失敗就讓 PR 的 check 變紅
+name: Codex quality gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  gate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Codex CLI and jq
+        run: |
+          npm install -g @openai/codex
+          sudo apt-get update -qq && sudo apt-get install -y -qq jq
+      - name: Run gate
+        env:
+          CODEX_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # codex exec 讀的是 CODEX_API_KEY（官方 Environment variables）
+        run: bash scripts/codex_gate.sh
+      - name: Upload review JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-review
+          path: codex-review.json

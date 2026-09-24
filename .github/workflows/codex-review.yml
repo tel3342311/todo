@@ -1,0 +1,53 @@
+# 單元 5：把 Codex Harness 接進 CI（載體：GitHub Actions）
+# 每次 PR 開啟/更新，Codex 以 read-only sandbox 審查 diff，並把結果貼成 PR 留言。
+# 安全守則：只在 pull_request 事件觸發、不對外部 fork 開放、contents 只給 read。
+name: Codex PR review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  codex:
+    if: github.event.pull_request.head.repo.full_name == github.repository   # 不對 fork 跑
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      final_message: ${{ steps.run_codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Codex review
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/review.md
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          output-file: codex-output.md
+
+  post_feedback:
+    runs-on: ubuntu-latest
+    needs: codex
+    if: needs.codex.outputs.final_message != ''
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          CODEX_FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: "## Codex review\n\n" + process.env.CODEX_FINAL_MESSAGE,
+            });

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Todo</title>
+<style>
+  :root { --dark:#595460; --accent:#6B6B8F; --light:#EBEDEB; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Microsoft JhengHei", system-ui, sans-serif; background: var(--light); color:#222; }
+  main { max-width: 560px; margin: 40px auto; background:#fff; border-radius: 12px; padding: 24px 28px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  h1 { margin:0 0 4px; font-size: 22px; color: var(--dark); }
+  .sub { font-size: 13px; color:#777; margin-bottom: 18px; }
+  form { display:flex; gap:8px; margin-bottom: 14px; }
+  input[type=text] { flex:1; padding:10px 12px; font-size:15px; border:1px solid #ccc; border-radius:8px; }
+  button { padding:10px 16px; font-size:15px; border:0; border-radius:8px; background: var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:#999; padding:4px 8px; font-size:16px; }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#555; margin-bottom:8px; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; align-items:center; gap:10px; padding:10px 6px; border-bottom:1px solid #eee; }
+  li.done span.t { text-decoration: line-through; color:#999; }
+  span.t { flex:1; }
+  .empty { text-align:center; color:#999; padding: 24px 0; }
+  footer { margin-top: 18px; font-size: 12px; color:#888; display:flex; justify-content:space-between; }
+  footer code { background:#f3f3f3; padding:2px 6px; border-radius:4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>待辦清單</h1>
+  <div class="sub">Codex × Harness 實戰課程 — todo-api 示範前端</div>
+
+  <form id="f">
+    <input id="title" type="text" placeholder="要做什麼？" autocomplete="off" required>
+    <button type="submit">新增</button>
+  </form>
+
+  <div class="toolbar">
+    <span id="stats">—</span>
+    <label>顯示
+      <select id="filter">
+        <option value="">全部</option>
+        <option value="false">未完成</option>
+        <option value="true">已完成</option>
+      </select>
+    </label>
+  </div>
+
+  <ul id="list"></ul>
+  <div id="empty" class="empty" hidden>還沒有待辦，先加一筆吧。</div>
+
+  <footer>
+    <span>API 文件：<a href="/docs">/docs</a></span>
+    <span>版本 <code id="ver">…</code></span>
+  </footer>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const api = (path, opt = {}) => fetch(path, { headers: { "Content-Type": "application/json" }, ...opt });
+
+async function load() {
+  // 實作 4：Codex Cloud 加了 GET /todos?done=true|false 之後，這個下拉選單就會生效
+  const done = $("#filter").value;
+  const r = await api("/todos" + (done ? `?done=${done}` : ""));
+  const todos = await r.json();
+  const ul = $("#list"); ul.innerHTML = "";
+  $("#empty").hidden = todos.length > 0;
+  for (const t of todos) {
+    const li = document.createElement("li"); li.className = t.done ? "done" : "";
+    li.innerHTML = `<input type="checkbox" ${t.done ? "checked" : ""}> <span class="t"></span> <button class="ghost" title="刪除">✕</button>`;
+    li.querySelector(".t").textContent = t.title;
+    li.querySelector("input").onchange = async (e) => { await api(`/todos/${t.id}`, { method: "PATCH", body: JSON.stringify({ done: e.target.checked }) }); load(); };
+    li.querySelector("button").onclick = async () => { await api(`/todos/${t.id}`, { method: "DELETE" }); load(); };
+    ul.appendChild(li);
+  }
+  loadStats();
+}
+
+async function loadStats() {
+  // 實作 3-A：資料庫是空的時候 /stats 會 500 —— 修好之前這裡會顯示「統計失敗」
+  try {
+    const r = await api("/stats");
+    if (!r.ok) throw new Error(r.status);
+    const s = await r.json();
+    $("#stats").textContent = `共 ${s.total} 筆，完成 ${s.done} 筆（${s.completion_rate}%）`;
+  } catch (e) { $("#stats").textContent = "統計失敗（/stats 回 " + e.message + "）"; }
+}
+
+async function loadVersion() {
+  // 實作 7：Argo CD 同步新版之後，重新整理這裡的版本號就會變
+  const r = await api("/health"); const h = await r.json();
+  $("#ver").textContent = h.version;
+}
+
+$("#f").onsubmit = async (e) => {
+  e.preventDefault();
+  await api("/todos", { method: "POST", body: JSON.stringify({ title: $("#title").value }) });
+  $("#title").value = ""; load();
+};
+$("#filter").onchange = load;
+loadVersion(); load();
+</script>
+</body>
+</html>
