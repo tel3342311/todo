@@ -6,7 +6,7 @@
   GET    /todos           列出所有待辦
   POST   /todos           新增待辦
   GET    /todos/{id}      取得單筆
-  PATCH  /todos/{id}      更新（title / done）
+  PATCH  /todos/{id}      更新（title / done / finish_date）
   DELETE /todos/{id}      刪除
   GET    /stats           統計（總數、完成數、完成率）
 """
@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import db as db_module
-from .db import Base, get_db
+from .db import get_db
 from .models import Todo, TodoCreate, TodoOut, TodoUpdate
 
 APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
@@ -29,8 +29,8 @@ APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """啟動時建表（教學用；正式環境請改用 Alembic migration）。"""
-    Base.metadata.create_all(bind=db_module.engine)
+    """啟動時建表並升級既有 SQLite schema。"""
+    db_module.initialize_database()
     yield
 
 
@@ -62,8 +62,8 @@ def list_todos(db: Session = Depends(get_db), done: bool | None = None) -> list[
 
 @app.post("/todos", response_model=TodoOut, status_code=status.HTTP_201_CREATED)
 def create_todo(payload: TodoCreate, db: Session = Depends(get_db)) -> Todo:
-    """建立並儲存待辦。"""
-    todo = Todo(title=payload.title)
+    """建立待辦，可選擇設定目標完成日期。"""
+    todo = Todo(title=payload.title, finish_date=payload.finish_date)
     db.add(todo)
     db.commit()
     db.refresh(todo)
@@ -84,12 +84,14 @@ def get_todo(todo_id: int, db: Session = Depends(get_db)):
 
 @app.patch("/todos/{todo_id}", response_model=TodoOut)
 def update_todo(todo_id: int, payload: TodoUpdate, db: Session = Depends(get_db)) -> Todo:
-    """更新待辦標題或完成狀態。"""
+    """更新待辦；完成日期省略時保留，明確傳 null 時清除。"""
     todo = _get_or_404(db, todo_id)
     if payload.title is not None:
         todo.title = payload.title
     if payload.done is not None:
         todo.done = payload.done
+    if "finish_date" in payload.model_fields_set:
+        todo.finish_date = payload.finish_date
     db.commit()
     db.refresh(todo)
     return todo

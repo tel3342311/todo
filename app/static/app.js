@@ -21,6 +21,11 @@ export function taskDate(value) {
   return new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`);
 }
 
+/** Build date-only form data; blank dates explicitly clear a saved target date. */
+export function todoPayload(title, finishDate) {
+  return { title: title.trim(), finish_date: finishDate || null };
+}
+
 /** Check every API response; never retry a write automatically. */
 export async function request(path, method = 'GET', payload) {
   const controller = new AbortController();
@@ -37,7 +42,14 @@ export async function request(path, method = 'GET', payload) {
       throw new Error('連線中斷或逾時，請檢查伺服器。若剛才有儲存或刪除，請先重新整理確認結果再試。');
     }
     if (!response.ok) {
-      if (response.status === 422) throw new Error('請輸入 1–200 字的標題，不可只有空白。');
+      if (response.status === 422) {
+        const validation = await response.json().catch(() => null);
+        if (Array.isArray(validation?.detail) && validation.detail.some(error =>
+          Array.isArray(error.loc) && error.loc.includes('finish_date'))) {
+          throw new Error('請輸入有效的完成日期（YYYY-MM-DD），或留空不設定。');
+        }
+        throw new Error('請輸入 1–200 字的標題，不可只有空白。');
+      }
       if (response.status === 404) throw new Error('這筆待辦已不存在，請重新整理清單。');
       throw new Error(`操作失敗（${response.status}），請稍後重新整理確認結果。`);
     }
@@ -80,6 +92,7 @@ function initialize() {
     // Do not allow writes against a list that has never loaded successfully.
     $('#add-button').disabled = busy || !state.loaded;
     $('#title').disabled = busy || !state.loaded;
+    $('#finish-date').disabled = busy || !state.loaded;
     $('#list').setAttribute('aria-busy', String(busy));
     if (!busy) {
       const previous = state.focusedControl;
@@ -143,6 +156,16 @@ function initialize() {
       date.title = created.toLocaleString('zh-TW');
     }
     copy.append(title, date);
+    const finishDate = document.createElement(todo.finish_date ? 'time' : 'span');
+    finishDate.className = `task-finish-date${todo.finish_date ? '' : ' unset'}`;
+    if (todo.finish_date) {
+      // Keep calendar dates as strings: timezone conversion could shift the chosen day.
+      finishDate.dateTime = todo.finish_date;
+      finishDate.textContent = `目標完成：${todo.finish_date}`;
+    } else {
+      finishDate.textContent = '未設定完成日期';
+    }
+    copy.append(finishDate);
     const actions = document.createElement('div');
     actions.className = 'task-actions';
     for (const [action, label] of [['edit', '編輯'], ['delete', '刪除']]) {
@@ -217,8 +240,10 @@ function initialize() {
     if (state.busy) return;
     state.selected = todo.id;
     message('', `#${action}-error`);
-    if (action === 'edit') $('#edit-title').value = todo.title;
-    else $('#delete-title').textContent = todo.title;
+    if (action === 'edit') {
+      $('#edit-title').value = todo.title;
+      $('#edit-finish-date').value = todo.finish_date || '';
+    } else $('#delete-title').textContent = todo.title;
     $(`#${action}-dialog`).showModal();
     if (action === 'edit') {
       $('#edit-title').focus();
@@ -231,10 +256,11 @@ function initialize() {
     const title = $('#title').value.trim();
     if (!title) { message('請先輸入待辦標題，不可只有空白。'); return; }
     const added = await mutate(async () => {
-      state.todos.push(await request('/todos', 'POST', { title }));
+      state.todos.push(await request('/todos', 'POST', todoPayload(title, $('#finish-date').value)));
     }, '待辦已新增。');
     if (added) {
       $('#title').value = '';
+      $('#finish-date').value = '';
       $('#search').value = '';
       state.filter = 'all';
       $('#sort').value = 'newest';
@@ -248,7 +274,8 @@ function initialize() {
     const title = $('#edit-title').value.trim();
     if (!title) { message('請先輸入待辦標題，不可只有空白。', '#edit-error'); return; }
     const edited = await mutate(async () => {
-      replaceTask(await request(`/todos/${state.selected}`, 'PATCH', { title }));
+      replaceTask(await request(`/todos/${state.selected}`, 'PATCH',
+        todoPayload(title, $('#edit-finish-date').value)));
     }, '待辦已更新。', '#edit-error');
     if (edited) { $('#edit-dialog').close(); render(); }
   });

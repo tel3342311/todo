@@ -3,6 +3,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app import db as db_module
+
 
 def test_health(client):
     r = client.get("/health")
@@ -130,3 +132,106 @@ def test_static_assets_available(client: TestClient, asset: str, content_type: s
 def test_static_unknown_asset(client: TestClient) -> None:
     """不存在的靜態資源回傳 404。"""
     assert client.get("/static/missing.js").status_code == 404
+
+
+@pytest.mark.parametrize("finish_date", ["2026-10-01", "2024-02-29", "2020-01-01"])
+def test_create_todo_finish_date_persists(client: TestClient, finish_date: str) -> None:
+    """A chosen calendar date survives creation, retrieval, and listing."""
+    response = client.post("/todos", json={"title": "Plan", "finish_date": finish_date})
+    assert response.status_code == 201
+    todo = response.json()
+    assert todo["finish_date"] == finish_date
+    assert client.get(f"/todos/{todo['id']}").json()["finish_date"] == finish_date
+    assert client.get("/todos").json()[0]["finish_date"] == finish_date
+
+
+@pytest.mark.parametrize("extra", [{}, {"finish_date": None}])
+def test_create_todo_finish_date_optional(client: TestClient, extra: dict) -> None:
+    """Existing clients can still create tasks without a finish date."""
+    response = client.post("/todos", json={"title": "No date", **extra})
+    assert response.status_code == 201
+    assert response.json()["finish_date"] is None
+
+
+@pytest.mark.parametrize("finish_date", ["not-a-date", "2026-02-30", "2026-13-01", ""])
+def test_create_todo_rejects_invalid_finish_date(client: TestClient, finish_date: str) -> None:
+    """Invalid calendar dates cannot create a task."""
+    response = client.post("/todos", json={"title": "Invalid", "finish_date": finish_date})
+    assert response.status_code == 422
+    assert client.get("/todos").json() == []
+
+
+@pytest.mark.parametrize("finish_date", ["2026-11-01", None])
+def test_patch_todo_changes_or_clears_finish_date(
+    client: TestClient, finish_date: str | None
+) -> None:
+    """An explicit date replaces the old date and explicit null clears it."""
+    todo = client.post("/todos", json={"title": "Plan", "finish_date": "2026-10-01"}).json()
+    response = client.patch(f"/todos/{todo['id']}", json={"finish_date": finish_date})
+    assert response.status_code == 200
+    stored = client.get(f"/todos/{todo['id']}").json()
+    assert stored == {**todo, "finish_date": finish_date}
+
+
+def test_patch_todo_sets_previously_missing_finish_date(client: TestClient) -> None:
+    """A task created without a date can be scheduled later."""
+    todo = client.post("/todos", json={"title": "Plan"}).json()
+    response = client.patch(f"/todos/{todo['id']}", json={"finish_date": "2026-10-01"})
+    assert response.status_code == 200
+    assert client.get(f"/todos/{todo['id']}").json()["finish_date"] == "2026-10-01"
+
+
+@pytest.mark.parametrize("update", [{"title": "Renamed"}, {"done": True}, {"done": False}, {}])
+def test_patch_todo_omitted_finish_date_preserved(client: TestClient, update: dict) -> None:
+    """Renaming or toggling a task must not clear its target date."""
+    todo = client.post("/todos", json={"title": "Plan", "finish_date": "2026-10-01"}).json()
+    response = client.patch(f"/todos/{todo['id']}", json=update)
+    assert response.status_code == 200
+    assert client.get(f"/todos/{todo['id']}").json()["finish_date"] == "2026-10-01"
+
+
+@pytest.mark.parametrize("finish_date", ["invalid", "2026-02-29", ""])
+def test_patch_todo_invalid_finish_date_leaves_task_unchanged(
+    client: TestClient, finish_date: str
+) -> None:
+    """Invalid date updates are atomic and leave all saved fields intact."""
+    todo = client.post("/todos", json={"title": "Plan", "finish_date": "2026-10-01"}).json()
+    response = client.patch(
+        f"/todos/{todo['id']}", json={"title": "Changed", "finish_date": finish_date}
+    )
+    assert response.status_code == 422
+    assert client.get(f"/todos/{todo['id']}").json() == todo
+
+
+def test_list_todos_legacy_database_upgrade_preserves_tasks(client: TestClient) -> None:
+    """Upgrading the original SQLite schema preserves existing task data."""
+    # The client fixture owns this isolated in-memory database.
+    db_module.Base.metadata.drop_all(db_module.engine)
+    with db_module.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE todos (id INTEGER PRIMARY KEY, title VARCHAR(200) NOT NULL, "
+            "done BOOLEAN NOT NULL, created_at DATETIME)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO todos (id, title, done, created_at) VALUES (?, ?, ?, ?)",
+            (7, "Existing task", True, "2026-09-24 06:00:00"),
+        )
+    db_module.initialize_database()
+    response = client.get("/todos")
+    assert response.status_code == 200
+    assert response.json() == [{
+        "id": 7, "title": "Existing task", "done": True,
+        "created_at": "2026-09-24T06:00:00", "finish_date": None,
+    }]
+    assert client.patch("/todos/7", json={"finish_date": "2026-10-01"}).status_code == 200
+    assert client.get("/todos/7").json()["finish_date"] == "2026-10-01"
+
+
+def test_list_todos_repeated_initialization_preserves_dates(client: TestClient) -> None:
+    """Restarting an upgraded database does not reset saved dates."""
+    todo = client.post("/todos", json={"title": "Plan", "finish_date": "2026-10-01"}).json()
+    db_module.initialize_database()
+    db_module.initialize_database()
+    stored = client.get(f"/todos/{todo['id']}").json()
+    assert stored["finish_date"] == "2026-10-01"
+    assert stored == todo

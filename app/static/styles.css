@@ -50,6 +50,13 @@ h2 { margin: 0; font-size: 22px; font-weight: 650; }
 .add-form input { flex: 1; min-width: 0; width: 100%; border: none; background: transparent; padding: 8px 0; color: var(--ink); }
 input::placeholder { color: #87918a; }
 .hint { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.schedule-field { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 14px; }
+.schedule-field label { font-size: 12px; color: var(--muted); }
+.schedule-field input { min-width: 150px; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: var(--paper); color: var(--ink); font-size: 13px; }
+.schedule-field .hint { margin: 0; }
+.edit-schedule { margin-top: 18px; }
+.task-finish-date { display: block; font-size: 11px; color: var(--green); margin-top: 4px; }
+.task-finish-date.unset { color: var(--muted); }
 .status { font-size: 12px; color: var(--green); min-height: 20px; margin: 8px 0; }
 .error { background: #fff1ef; border: 1px solid #e9bcb5; color: #97352b; padding: 12px; border-radius: 8px; margin: 14px 0; font-size: 13px; overflow-wrap: anywhere; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0 20px; border-bottom: 1px solid var(--border); }
