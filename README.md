@@ -16,11 +16,22 @@ python run.py dev    # = make dev；開 http://localhost:8000（前端頁）或 
 ```
 `run.py` 是 Makefile 的跨平台版（Windows 沒有 make）；`python run.py help` 列出全部指令。
 
+## 推送後自動部署到 Docker Desktop
+
+將 `.github/workflows/deploy-docker-desktop.yml` 合併到 `main`，並在 Docker Desktop 的電腦上註冊
+帶有 `todo-docker-desktop` label 的 Windows self-hosted runner。之後每次 **push 到 `main`** 都會先執行測試，
+再自動建置並部署容器至 **http://localhost:8080**。只有本機 commit、尚未 push 時不會觸發 GitHub Actions。
+
+Docker Desktop 須使用 **Linux containers** 模式，電腦與 runner 必須保持上線。
+SQLite 透過 `todo-desktop-data` volume 保留；容器資料與本機開發用的 `todo.db` 分開。
+設定步驟、手動部署及故障排除見 [Docker Desktop 部署指南](docs/DOCKER_DESKTOP.md)。
+
 ## 待辦應用程式
 
 開啟 http://localhost:8000 使用單人待辦清單，支援桌面與手機版面：
 
 - 新增、編輯標題、勾選完成／恢復未完成，以及確認後刪除。
+- 新增或編輯時可設定目標完成日期；留空可不設定或清除，日期會顯示於待辦項目。
 - 全部／未完成／已完成篩選、標題搜尋，以及新增時間／標題排序。
 - 顯示全部待辦的數量與完成比例；搜尋及篩選不影響總進度。
 - 儲存失敗會保留輸入並顯示錯誤；按「重新整理」取得伺服器最新資料。
@@ -28,13 +39,18 @@ python run.py dev    # = make dev；開 http://localhost:8000（前端頁）或 
 
 資料預設存於工作目錄的 `todo.db`，重新啟動後仍保留；可用 `DATABASE_URL` 指定位置。
 這是單人應用，沒有帳號或登入隔離。前端使用原生 HTML、CSS、JavaScript，不需要前端建置工具。
-本次不變更資料表結構；既有資料保留，新的標題驗證只套用於新增或更新。
+啟動時會自動為既有 SQLite 的 `todos` 表新增可為空的 `finish_date DATE` 欄位；
+原有 ID、標題、完成狀態與建立時間不變，既有待辦的日期為 `null`，可重複啟動而不重設日期。
+升級前建議備份 `todo.db`。其他資料庫的既有表須先由管理者新增相同的 nullable DATE 欄位。
 
 ### API 與測試
 
 `GET /todos` 列出所有待辦（ID 升冪）；`GET /todos?done=true` 或 `?done=false` 依完成狀態篩選，
 非法狀態值回傳 `422`。新增使用 `POST /todos`，單筆讀取、修改、刪除使用
 `GET`、`PATCH`、`DELETE /todos/{todo_id}`。完整 schema 與互動操作位於 `/docs`。
+`finish_date` 是使用者選擇的目標日期（`YYYY-MM-DD`），不是實際完成時間；勾選完成不會改變它。
+新增時可省略或傳 `null`；修改時省略表示保留，傳 `null` 表示清除。過去日期也允許使用。
+請求範例與回應格式見 [API 說明](docs/API.md)。
 
 ```bash
 python run.py test                    # pytest API、驗證及靜態資源測試

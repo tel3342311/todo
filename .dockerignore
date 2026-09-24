@@ -6,3 +6,11 @@ tests
 todo.db
 .pytest_cache
 .ruff_cache
+.env
+.env.*
+.codex
+.agents
+.github
+docs
+*.sqlite3
+*.db

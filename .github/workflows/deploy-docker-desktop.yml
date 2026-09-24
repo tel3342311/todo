@@ -1,0 +1,54 @@
+name: Deploy to Docker Desktop
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-desktop-main
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+      - run: node --test tests/frontend.test.mjs
+      - name: Test deployment failure handling
+        shell: pwsh
+        run: ./scripts/test-docker-desktop-deploy.ps1
+
+  deploy:
+    needs: test
+    # Never execute pull request code or manually selected feature branches on this PC.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, X64, todo-docker-desktop]
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Build, deploy, and verify health
+        env:
+          APP_VERSION: ${{ github.sha }}
+          TODO_PORT: ${{ vars.TODO_DESKTOP_PORT || '8080' }}
+        run: ./scripts/deploy-docker-desktop.ps1 -ImageTag $env:APP_VERSION -Port $env:TODO_PORT

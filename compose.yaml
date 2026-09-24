@@ -1,0 +1,29 @@
+name: todo-desktop
+
+services:
+  todo-api:
+    image: todo-api:${APP_VERSION:-dev}
+    build:
+      context: .
+    environment:
+      DATABASE_URL: sqlite:////data/todo.db
+      APP_VERSION: ${APP_VERSION:-dev}
+    ports:
+      - "127.0.0.1:${TODO_PORT:-8080}:8000"
+    volumes:
+      - todo-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  todo-data:
+    name: todo-desktop-data

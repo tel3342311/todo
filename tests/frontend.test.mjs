@@ -4,7 +4,7 @@ import test from 'node:test';
 
 // Load the browser module without introducing a Node package or a DOM dependency.
 const source = await readFile(new URL('../app/static/app.js', import.meta.url), 'utf8');
-const { selectTodos, summarize, request, taskDate } = await import(
+const { selectTodos, summarize, request, taskDate, todoPayload } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 );
 const todos = [
@@ -71,4 +71,31 @@ test('validation and missing-task errors explain how to recover', async t => {
 test('network failure rejects with a connection message', async t => {
   t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Failed to fetch'); });
   await assert.rejects(request('/todos'), /連線/);
+});
+
+test('date form payload preserves the calendar date and clears blank dates explicitly', () => {
+  assert.deepEqual(todoPayload('  Plan  ', '2026-10-01'), {
+    title: 'Plan', finish_date: '2026-10-01',
+  });
+  assert.deepEqual(todoPayload('Plan', ''), { title: 'Plan', finish_date: null });
+});
+
+test('saving and clearing a target date sends the expected API payload', async t => {
+  const saved = { id: 8, title: 'Plan', done: false, finish_date: '2026-10-01' };
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    assert.equal(path, '/todos/8');
+    assert.equal(options.method, 'PATCH');
+    const body = JSON.parse(options.body);
+    return new Response(JSON.stringify({ ...saved, ...body }), { status: 200 });
+  });
+  assert.equal((await request('/todos/8', 'PATCH', todoPayload('Plan', '2026-10-01'))).finish_date,
+    '2026-10-01');
+  assert.equal((await request('/todos/8', 'PATCH', todoPayload('Plan', ''))).finish_date, null);
+});
+
+test('invalid finish dates receive a date-specific validation error', async t => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    detail: [{ loc: ['body', 'finish_date'], msg: 'Invalid date' }],
+  }), { status: 422 }));
+  await assert.rejects(request('/todos', 'POST', { title: 'Plan', finish_date: 'bad' }), /日期/);
 });

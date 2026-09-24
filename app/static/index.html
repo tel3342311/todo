@@ -35,6 +35,11 @@
         <input id="title" name="title" type="text" placeholder="下一件想完成的事是什麼？" maxlength="200" required autocomplete="off" aria-describedby="title-hint">
         <button id="add-button" class="button primary" type="submit">新增待辦 <span aria-hidden="true">↗</span></button>
       </form>
+      <div class="schedule-field">
+        <label for="finish-date">目標完成日期（選填）</label>
+        <input id="finish-date" name="finish_date" form="add-form" type="date" min="0001-01-01" max="9999-12-31" aria-describedby="finish-date-hint">
+        <span id="finish-date-hint" class="hint">不設定也可以，之後可隨時調整。</span>
+      </div>
       <p id="title-hint" class="hint">按 Enter 新增，最多 200 字。</p>
       <div id="error" class="error" role="alert" hidden></div>
       <p id="status" class="status" role="status" aria-live="polite">正在載入待辦…</p>
@@ -59,6 +64,11 @@
   <dialog id="edit-dialog" aria-labelledby="edit-heading">
     <form id="edit-form"><p class="eyebrow">A LITTLE ADJUSTMENT</p><h2 id="edit-heading">編輯待辦</h2>
       <label for="edit-title">待辦標題</label><input id="edit-title" type="text" maxlength="200" required autocomplete="off">
+      <div class="edit-schedule">
+        <label for="edit-finish-date">目標完成日期（選填）</label>
+        <input id="edit-finish-date" type="date" min="0001-01-01" max="9999-12-31" aria-describedby="edit-date-hint">
+        <p id="edit-date-hint" class="hint">留空可清除日期。勾選完成不會改變目標日期。</p>
+      </div>
       <p id="edit-error" class="error" role="alert" hidden></p>
       <div class="dialog-actions"><button id="edit-cancel" class="button secondary" type="button">取消</button><button class="button primary" type="submit">儲存變更</button></div>
     </form>
