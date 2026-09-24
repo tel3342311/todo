@@ -1,4 +1,4 @@
-# todo-api — Codex × Harness 實戰課程專案
+# todo-api — Codex × Harness 實戰課程專案 20260924
 
 一個刻意做小的 FastAPI 待辦清單 API，用來走完整條路：
 **Codex 寫程式 → Git → GitHub Actions CI/CD → Argo CD GitOps → 自建 Worker Agent。**
@@ -15,6 +15,35 @@ python run.py test   # = make test
 python run.py dev    # = make dev；開 http://localhost:8000（前端頁）或 /docs（Swagger）
 ```
 `run.py` 是 Makefile 的跨平台版（Windows 沒有 make）；`python run.py help` 列出全部指令。
+
+## 待辦應用程式
+
+開啟 http://localhost:8000 使用單人待辦清單，支援桌面與手機版面：
+
+- 新增、編輯標題、勾選完成／恢復未完成，以及確認後刪除。
+- 全部／未完成／已完成篩選、標題搜尋，以及新增時間／標題排序。
+- 顯示全部待辦的數量與完成比例；搜尋及篩選不影響總進度。
+- 儲存失敗會保留輸入並顯示錯誤；按「重新整理」取得伺服器最新資料。
+- 標題去除頭尾空白後須為 1–200 字，不接受只有空白的標題。
+
+資料預設存於工作目錄的 `todo.db`，重新啟動後仍保留；可用 `DATABASE_URL` 指定位置。
+這是單人應用，沒有帳號或登入隔離。前端使用原生 HTML、CSS、JavaScript，不需要前端建置工具。
+本次不變更資料表結構；既有資料保留，新的標題驗證只套用於新增或更新。
+
+### API 與測試
+
+`GET /todos` 列出所有待辦（ID 升冪）；`GET /todos?done=true` 或 `?done=false` 依完成狀態篩選，
+非法狀態值回傳 `422`。新增使用 `POST /todos`，單筆讀取、修改、刪除使用
+`GET`、`PATCH`、`DELETE /todos/{todo_id}`。完整 schema 與互動操作位於 `/docs`。
+
+```bash
+python run.py test                    # pytest API、驗證及靜態資源測試
+python run.py lint                    # ruff 程式碼檢查
+node --test tests/frontend.test.mjs   # Node.js 20+；搜尋、排序、統計與錯誤處理
+```
+
+前端資源由 `/static/` 提供。介面的進度直接由完整待辦列表計算，不呼叫 `/stats`；
+`/stats` 空資料時的已知錯誤與 `legacy_report.py` 仍保留作為課堂練習。
 
 ## Windows 學員請先看
 - **建議用 WSL2**（Ubuntu）＋ Docker Desktop 的 WSL integration：Codex 官方支援 WSL2，且本專案的 `Makefile`、`scripts/*.sh`、Rules 範例（`rm -rf`）都是 Linux 指令，在 WSL2 裡跟 macOS 完全一致。

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -36,11 +37,12 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Todo API", version=APP_VERSION, lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
-    """極簡前端頁：新增／勾選／刪除待辦，右下角顯示版本號（給課堂 Demo 用）。"""
+    """提供待辦管理介面。"""
     return FileResponse(STATIC_DIR / "index.html")
 
 
@@ -50,12 +52,17 @@ def health() -> dict:
 
 
 @app.get("/todos", response_model=list[TodoOut])
-def list_todos(db: Session = Depends(get_db)):
-    return db.scalars(select(Todo).order_by(Todo.id)).all()
+def list_todos(db: Session = Depends(get_db), done: bool | None = None) -> list[Todo]:
+    """依 ID 列出待辦，可選擇以完成狀態篩選。"""
+    query = select(Todo).order_by(Todo.id)
+    if done is not None:
+        query = query.where(Todo.done == done)
+    return list(db.scalars(query).all())
 
 
 @app.post("/todos", response_model=TodoOut, status_code=status.HTTP_201_CREATED)
-def create_todo(payload: TodoCreate, db: Session = Depends(get_db)):
+def create_todo(payload: TodoCreate, db: Session = Depends(get_db)) -> Todo:
+    """建立並儲存待辦。"""
     todo = Todo(title=payload.title)
     db.add(todo)
     db.commit()
@@ -76,7 +83,8 @@ def get_todo(todo_id: int, db: Session = Depends(get_db)):
 
 
 @app.patch("/todos/{todo_id}", response_model=TodoOut)
-def update_todo(todo_id: int, payload: TodoUpdate, db: Session = Depends(get_db)):
+def update_todo(todo_id: int, payload: TodoUpdate, db: Session = Depends(get_db)) -> Todo:
+    """更新待辦標題或完成狀態。"""
     todo = _get_or_404(db, todo_id)
     if payload.title is not None:
         todo.title = payload.title

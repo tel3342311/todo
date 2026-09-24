@@ -1,7 +1,7 @@
 """ORM 模型與 Pydantic schema。"""
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,10 +21,14 @@ class Todo(Base):
 
 # ---------- Pydantic schemas ----------
 class TodoCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     title: str = Field(min_length=1, max_length=200)
 
 
 class TodoUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     title: str | None = Field(default=None, min_length=1, max_length=200)
     done: bool | None = None
 
