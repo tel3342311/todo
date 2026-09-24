@@ -16,6 +16,16 @@ python run.py dev    # = make dev；開 http://localhost:8000（前端頁）或 
 ```
 `run.py` 是 Makefile 的跨平台版（Windows 沒有 make）；`python run.py help` 列出全部指令。
 
+## 推送後自動部署到 Docker Desktop
+
+將 `.github/workflows/deploy-docker-desktop.yml` 合併到 `main`，並在 Docker Desktop 的電腦上註冊
+帶有 `todo-docker-desktop` label 的 Windows self-hosted runner。之後每次 **push 到 `main`** 都會先執行測試，
+再自動建置並部署容器至 **http://localhost:8080**。只有本機 commit、尚未 push 時不會觸發 GitHub Actions。
+
+Docker Desktop 須使用 **Linux containers** 模式，電腦與 runner 必須保持上線。
+SQLite 透過 `todo-desktop-data` volume 保留；容器資料與本機開發用的 `todo.db` 分開。
+設定步驟、手動部署及故障排除見 [Docker Desktop 部署指南](docs/DOCKER_DESKTOP.md)。
+
 ## 待辦應用程式
 
 開啟 http://localhost:8000 使用單人待辦清單，支援桌面與手機版面：
