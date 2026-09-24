@@ -54,6 +54,24 @@ Repository administrators must enforce the setup restrictions above and review a
 Official setup references: [GitHub self-hosted runners](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners)
 and [Docker Desktop engine switching](https://docs.docker.com/reference/cli/docker/desktop/engine/use/).
 
+### This PC's runner
+
+The configured runner is named `todo-docker-desktop` and is installed at `D:\actions-runner-todo`.
+The Windows scheduled task **Todo GitHub Actions Runner** starts it in the Docker Desktop user's session at sign-in.
+Docker Desktop is also configured to start at sign-in. Remain signed in, keep the PC awake, and leave Docker Desktop running.
+The runner directory contains credentials; its permissions are restricted to the current user, administrators, and SYSTEM.
+Do not commit or copy that directory into the repository.
+
+```powershell
+Get-ScheduledTask -TaskName 'Todo GitHub Actions Runner'
+Start-ScheduledTask -TaskName 'Todo GitHub Actions Runner'
+Stop-ScheduledTask -TaskName 'Todo GitHub Actions Runner'
+```
+
+Startup console logs are in `D:\actions-runner-todo\runner-console.log` and `runner-errors.log`;
+runner diagnostic logs are in `_diag`. The repository's fork approval policy is configured as
+`all_external_contributors`; do not relax it while this public-repository runner is registered.
+
 ## Run or diagnose locally
 
 ```powershell
